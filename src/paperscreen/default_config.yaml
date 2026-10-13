@@ -1,0 +1,126 @@
+# paperscreen default configuration.
+# Copy to ./config.yaml (`paperscreen init`) and edit; your file is deep-merged over this one.
+# Secrets are read from the environment, never from this file:
+#   OPENALEX_API_KEY   (OpenAlex now requires a free key)
+#   NCBI_API_KEY       (optional; raises the PubMed rate limit)
+
+db_path: data/paperscreen.sqlite
+contact_email: null   # used in the User-Agent / mailto of API calls (be a polite client)
+seed: 0
+
+# --- Interests -------------------------------------------------------------------------
+# Each interest is a label you can attach to a positive judgement. The description is used
+# for cold start (zero-shot similarity) and as a quota group in the digest.
+interests:
+  - id: optimization
+    name: Optimization and loss functions
+    description: >-
+      Gradient descent and its variants, learning-rate schedules, adaptive optimizers such as
+      Adam, loss landscape geometry, convergence analysis, how the choice of loss function
+      affects training and generalization, and how to select or design loss functions.
+    categories: [math.OC, cs.LG, stat.ML]
+    anchors: []
+  - id: dl_theory
+    name: Deep learning theory
+    description: >-
+      Mathematical theory of deep learning and machine learning: generalization bounds,
+      implicit bias, neural tangent kernel, scaling laws, expressivity, double descent,
+      feature learning, training dynamics, statistical learning theory, proofs and formal
+      analysis of neural networks.
+    categories: [stat.ML, cs.LG, math.ST, cs.IT]
+    anchors: []
+  - id: architectures
+    name: Transformers and architectures
+    description: >-
+      Transformer architecture innovations: attention variants and efficient attention,
+      positional encodings, mixture of experts, state space models such as Mamba, long-context
+      methods, and new neural network architectures and their analysis.
+    categories: [cs.LG, cs.CL, cs.AI, cs.NE]
+    anchors: []
+  - id: training_methods
+    name: New training methods
+    description: >-
+      Novel training and regularization techniques: normalization methods, initialization,
+      pretraining and fine-tuning recipes, parameter-efficient fine-tuning, distillation,
+      self-supervised and contrastive objectives, data selection, and other new methods in
+      deep learning and machine learning.
+    categories: [cs.LG, stat.ML, cs.CV, cs.CL]
+    anchors: []
+  - id: mech_interp
+    name: Mechanistic interpretability
+    description: >-
+      Mechanistic interpretability of neural networks and language models: sparse autoencoders,
+      circuit analysis, superposition, feature visualization, probing, activation patching,
+      and understanding the internal representations learned by transformers.
+    categories: [cs.LG, cs.AI, cs.CL]
+    anchors: []
+
+# --- Sources ---------------------------------------------------------------------------
+sources:
+  arxiv:
+    enabled: true
+    categories: [cs.LG, stat.ML, cs.CL, cs.AI, cs.NE, math.OC, cs.CV]
+    page_size: 100
+    max_papers: 3000        # safety cap per fetch run
+  pubmed:
+    enabled: true
+    require_abstract: true
+    max_per_query: 200
+    queries:
+      - '("deep learning"[tiab] OR "neural network"[tiab]) AND (optimization[tiab] OR generalization[tiab] OR "loss function"[tiab] OR transformer[tiab])'
+      - '("mechanistic interpretability"[tiab] OR "sparse autoencoder"[tiab])'
+  openalex:
+    enabled: true           # needs OPENALEX_API_KEY; skipped with a message otherwise
+    max_per_query: 200
+    queries:
+      - gradient descent convergence neural networks
+      - transformer attention architecture
+      - generalization theory deep learning
+      - mechanistic interpretability language models
+      - loss function design deep learning
+
+# --- Representations / models ---------------------------------------------------------
+embedding:
+  model: bge-small          # hash-256 | bge-small | minilm | specter2-base | scincl
+  input_format: null        # null = the format each model was trained for
+
+model:
+  ranker: emb_logreg        # emb_logreg | per_interest_logreg | tfidf_svm | prototype
+  params:
+    C: 1.0
+    S: 1.0                  # total negative weight relative to positives
+    V: 0.5                  # share of the negative weight carried by random unlabeled papers
+    n_random: 1000
+  # Below these thresholds the digest uses zero-shot similarity to your interest descriptions.
+  min_labels: 50
+  min_positives: 10
+  min_negatives: 10
+  registry_dir: models      # every model that ranked a digest is saved here with a model card (null = off)
+  keep_versions: 30         # older versions are deleted
+
+# --- Digest ----------------------------------------------------------------------------
+digest:
+  per_interest: 4
+  n_random: 5               # uniformly random, unmarked picks: the unbiased evaluation slice
+  lookback_days: 3
+  proxy_prefix: null        # e.g. "https://ezproxy.your-university.edu/login?url=" for paywalled links
+  out_dir: digests
+
+# --- Evaluation ------------------------------------------------------------------------
+evaluation:
+  step_days: 7              # retrain cutoff every N days; each window is one bootstrap unit
+  min_train_labels: 50
+  min_train_positives: 5
+  k: 10
+  ndcg_k: 20
+  n_boot: 2000
+  min_interest_positives: 20   # per-interest rows below this are flagged as uninterpretable
+  # Primary comparisons are fixed in ANALYSIS_PLAN.md and corrected with Holm.
+  primary:
+    - [emb_logreg, tfidf_svm]
+    - [emb_logreg, zeroshot]
+    - [per_interest_logreg, emb_logreg]
+  learning_curve_sizes: [50, 100, 200, 300, 500, 1000]
+  test_fraction: 0.3
+  extra_embedders: []       # e.g. [minilm, specter2-base, scincl] for the embedding ablation
+  out_dir: reports

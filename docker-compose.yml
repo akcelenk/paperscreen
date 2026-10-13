@@ -1,0 +1,10 @@
+services:
+  paperscreen:
+    build: .
+    ports:
+      - "127.0.0.1:8765:8765"   # reachable from this computer only
+    environment:
+      - OPENALEX_API_KEY
+      - NCBI_API_KEY
+    volumes:
+      - ./data:/app/data        # labels, database, config, model cache survive rebuilds

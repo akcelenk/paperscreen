@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>paperscreen</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --line: #e3e1d8;
+    --accent: #1f6f5c; --accent-ink: #ffffff; --no: #9b3d36; --chip: #eef3f0; --chip-on: #1f6f5c;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151614; --card: #1e201d; --ink: #ecebe4; --muted: #a2a198; --line: #34362f;
+      --accent: #5fbf9f; --accent-ink: #0f1a16; --no: #e0877f; --chip: #272a25; --chip-on: #5fbf9f;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 16px 80px; }
+  header { display: flex; align-items: center; gap: 16px; padding: 20px 0 8px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  nav { display: flex; gap: 4px; }
+  nav button { background: none; border: 0; padding: 6px 12px; border-radius: 8px; color: var(--muted);
+               font: inherit; cursor: pointer; }
+  nav button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+  .stats { margin-left: auto; color: var(--muted); font-size: 14px; }
+  .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0 16px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px;
+                   padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  .log { color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px;
+          box-shadow: var(--shadow); }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .card h2 { font-size: 21px; line-height: 1.3; margin: 0 0 10px; letter-spacing: -.01em; }
+  .abstract { color: var(--ink); opacity: .92; max-height: 22em; overflow: auto; }
+  .links { margin: 12px 0 4px; font-size: 14px; display: flex; gap: 14px; }
+  a { color: var(--accent); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 6px; }
+  .chip { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px;
+          padding: 5px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+  .chip.on { background: var(--chip-on); color: var(--accent-ink); border-color: var(--chip-on); }
+  .chip kbd { opacity: .6; margin-right: 6px; font-size: 12px; }
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .actions button { flex: 1; min-width: 110px; padding: 12px; border-radius: 12px; font: inherit; font-weight: 600;
+                    border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  .actions .yes { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .actions .no { color: var(--no); }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 8px; }
+  .progress { color: var(--muted); font-size: 13px; margin: 0 2px 8px; }
+  .report h2, .report h3, .report h4 { margin: 24px 0 8px; }
+  .report p { margin: 8px 0; } .report .li { margin: 4px 0; }
+  .report blockquote { margin: 12px 0; padding: 8px 14px; border-left: 3px solid var(--line); color: var(--muted); }
+  .report img { max-width: 100%; border-radius: 8px; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 14px; margin: 8px 0; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 10px; text-align: left; white-space: nowrap; }
+  code { background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size: .9em; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>paperscreen</h1>
+    <nav>
+      <button id="tab-review" class="on">Review</button>
+      <button id="tab-report">Report</button>
+      <button id="tab-monitor">Monitor</button>
+    </nav>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section id="view-review">
+    <div class="bar">
+      <button class="primary" id="refresh">Fetch new papers and build digest</button>
+      <span class="log" id="joblog"></span>
+    </div>
+    <div class="progress" id="progress"></div>
+    <div id="card"></div>
+  </section>
+
+  <section id="view-report" hidden>
+    <div class="bar">
+      <button class="primary" id="run-report">Run evaluation</button>
+      <span class="log" id="joblog2"></span>
+    </div>
+    <div class="report" id="report"></div>
+  </section>
+
+  <section id="view-monitor" hidden>
+    <div class="report" id="monitor"></div>
+  </section>
+</div>
+
+<script>
+const HEAD = {'Content-Type': 'application/json', 'X-Requested-With': 'paperscreen'};
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: HEAD, body: JSON.stringify(body)});
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+const $ = id => document.getElementById(id);
+const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : null;
+
+let state = null, items = [], idx = 0, selected = new Set(), history = [], busy = false;
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  kids.forEach(k => k && e.append(k));
+  return e;
+}
+
+async function loadState() {
+  state = await api('/api/state');
+  $('stats').textContent = `${state.labels} labels (${state.positives} yes) · ${state.unlabeled} waiting`;
+  showJob(state.job);
+}
+
+async function loadItems() {
+  $('card').replaceChildren(el('div', {class: 'empty', text: 'Loading papers... (the first load fetches the embedding model)'}));
+  items = await api('/api/items'); idx = 0; history = [];
+  startItem(); render();
+}
+
+function startItem() {
+  selected = new Set(items[idx] ? [items[idx].suggest] : []);
+}
+
+function render() {
+  const box = $('card'); box.replaceChildren();
+  $('progress').textContent = items.length ? `${Math.min(idx + 1, items.length)} of ${items.length}` : '';
+  if (idx >= items.length) {
+    const msg = items.length
+      ? 'All judged. Run the digest again tomorrow, or fetch more now.'
+      : 'Nothing to review yet. Fetch new papers to build a digest.';
+    box.append(el('div', {class: 'empty', text: msg}));
+    if (history.length) box.append(el('div', {class: 'actions'}, el('button', {text: 'Undo last (z)', onclick: undo})));
+    return;
+  }
+  const p = items[idx];
+  const meta = [p.source, p.published, p.venue].filter(Boolean).join(' · ');
+  const tags = el('div', {class: 'tags'});
+  state.interests.forEach((it, i) => {
+    tags.append(el('button', {class: 'chip' + (selected.has(it.id) ? ' on' : ''), onclick: () => toggle(it.id)},
+      el('kbd', {text: String(i + 1)}), it.name));
+  });
+  const links = el('div', {class: 'links'});
+  if (safeUrl(p.url)) links.append(el('a', {href: p.url, target: '_blank', rel: 'noopener', text: 'Open'}));
+  if (safeUrl(p.access_url)) links.append(el('a', {href: p.access_url, target: '_blank', rel: 'noopener', text: 'Via university'}));
+  box.append(el('div', {class: 'card'},
+    el('div', {class: 'meta', text: meta}),
+    el('h2', {text: p.title}),
+    p.authors ? el('div', {class: 'meta', text: p.authors}) : null,
+    el('div', {class: 'abstract', text: p.abstract || '(no abstract)'}),
+    links,
+    el('div', {class: 'meta', text: 'Interest tags for a yes (suggested one preselected):'}),
+    tags,
+    el('div', {class: 'actions'},
+      el('button', {class: 'yes', text: 'Interesting (y)', onclick: () => judge(1)}),
+      el('button', {class: 'no', text: 'Not for me (n)', onclick: () => judge(0)}),
+      el('button', {text: 'Skip (s)', onclick: skip}),
+      el('button', {text: 'Undo (z)', onclick: undo})),
+    el('div', {class: 'hint', text: 'Keys: y / n / s / z, and 1-5 to toggle tags. Judge each paper on its own.'})));
+}
+
+function toggle(id) { selected.has(id) ? selected.delete(id) : selected.add(id); render(); }
+
+async function judge(label) {
+  if (busy || idx >= items.length) return; busy = true;
+  try {
+    const p = items[idx];
+    await api('/api/label', {id: p.id, label, tags: label ? [...selected] : []});
+    history.push(idx); idx++; startItem(); render(); loadStateQuiet();
+  } catch (e) { alert(e.message); } finally { busy = false; }
+}
+function skip() { if (idx < items.length) { idx++; startItem(); render(); } }
+async function undo() {
+  if (busy || !history.length) return; busy = true;
+  try {
+    idx = history.pop();
+    await api('/api/unlabel', {id: items[idx].id});
+    startItem(); render(); loadStateQuiet();
+  } catch (e) { alert(e.message); } finally { busy = false; }
+}
+async function loadStateQuiet() { try { state = await api('/api/state'); $('stats').textContent =
+  `${state.labels} labels (${state.positives} yes) · ${state.unlabeled} waiting`; } catch (e) {} }
+
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || $('view-review').hidden) return;
+  if (e.key === 'y') judge(1); else if (e.key === 'n') judge(0);
+  else if (e.key === 's') skip(); else if (e.key === 'z') undo();
+  else if (/^[1-9]$/.test(e.key) && state && state.interests[+e.key - 1]) toggle(state.interests[+e.key - 1].id);
+});
+
+// ---- background jobs ---------------------------------------------------------------------
+let polling = null;
+function showJob(j) {
+  const text = j && j.name ? `${j.running ? 'Working: ' : j.error ? 'Failed: ' : 'Done: '}${j.error || (j.log || []).slice(-3).join('  ·  ')}` : '';
+  $('joblog').textContent = $('joblog2').textContent = text;
+  $('refresh').disabled = $('run-report').disabled = !!(j && j.running);
+}
+function watchJob(action) {
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    const j = await api('/api/job'); showJob(j);
+    if (!j.running) {
+      clearInterval(polling);
+      if (action === 'refresh' && !j.error) { await loadItems(); await loadStateQuiet(); }
+      if (action === 'report') loadReport();
+    }
+  }, 1500);
+}
+async function startJob(action) {
+  const r = await api('/api/run', {action});
+  if (!r.started) { alert('Another job is still running.'); return; }
+  showJob({name: action, running: true, log: ['started']});
+  watchJob(action);
+}
+$('refresh').onclick = () => startJob('refresh').catch(e => alert(e.message));
+$('run-report').onclick = () => startJob('report').catch(e => alert(e.message));
+
+// ---- report -------------------------------------------------------------------------------
+async function loadReport() {
+  const r = await api('/api/report');
+  const box = $('report');
+  if (!r.html) { box.textContent = 'No report yet. Run the evaluation (it needs at least ~50 labels to say anything).'; return; }
+  box.innerHTML = r.html;  // produced by the server from escaped Markdown
+}
+async function loadMonitor() {
+  const r = await api('/api/monitor');
+  $('monitor').innerHTML = r.html;  // produced by the server from escaped Markdown
+}
+function tab(name) {
+  for (const t of ['review', 'report', 'monitor']) {
+    $('view-' + t).hidden = name !== t; $('tab-' + t).classList.toggle('on', name === t);
+  }
+  if (name === 'report') loadReport();
+  if (name === 'monitor') loadMonitor().catch(e => { $('monitor').textContent = 'Could not load: ' + e.message; });
+}
+for (const t of ['review', 'report', 'monitor']) $('tab-' + t).onclick = () => tab(t);
+
+loadState().then(loadItems).then(() => { if (state.job.running) watchJob(state.job.name); }).catch(e => {
+  $('card').append(el('div', {class: 'empty', text: 'Could not load: ' + e.message}));
+});
+</script>
+</body>
+</html>

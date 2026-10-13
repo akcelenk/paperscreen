@@ -1,0 +1,36 @@
+{
+  "_comment": "Hand-written to follow the documented OpenAlex works schema; NOT a recorded live response.",
+  "meta": {"count": 3, "per_page": 100, "next_cursor": null},
+  "results": [
+    {
+      "id": "https://openalex.org/W111",
+      "doi": "https://doi.org/10.1016/j.neunet.2026.109725",
+      "title": "Adaptive parameter manifold learning for low-dimensional neural network optimization",
+      "publication_date": "2026-10-08",
+      "abstract_inverted_index": {"Deep": [0], "neural": [1], "networks": [2], "optimize": [3], "poorly": [4], "without": [5], "structure": [6]},
+      "authorships": [{"author": {"display_name": "A. Author"}}, {"author": {"display_name": "B. Writer"}}],
+      "primary_location": {"landing_page_url": "https://doi.org/10.1016/j.neunet.2026.109725", "source": {"display_name": "Neural Networks"}},
+      "ids": {"openalex": "https://openalex.org/W111", "pmid": "https://pubmed.ncbi.nlm.nih.gov/42863208"}
+    },
+    {
+      "id": "https://openalex.org/W222",
+      "doi": "https://doi.org/10.48550/arxiv.2410.01234",
+      "title": "A sample preprint about attention variants",
+      "publication_date": "2026-10-01",
+      "abstract_inverted_index": {"We": [0], "study": [1], "attention": [2], "variants": [3]},
+      "authorships": [{"author": {"display_name": "C. Coder"}}],
+      "primary_location": {"landing_page_url": "https://arxiv.org/abs/2410.01234", "source": null},
+      "ids": {"openalex": "https://openalex.org/W222"}
+    },
+    {
+      "id": "https://openalex.org/W333",
+      "doi": null,
+      "title": "A record without an abstract",
+      "publication_date": "2026-10-02",
+      "abstract_inverted_index": null,
+      "authorships": [],
+      "primary_location": null,
+      "ids": {"openalex": "https://openalex.org/W333"}
+    }
+  ]
+}
