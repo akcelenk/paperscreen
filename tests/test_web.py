@@ -2,6 +2,7 @@ import http.client
 import json
 import threading
 import time
+from datetime import datetime, timezone
 
 import pytest
 from conftest import labels_of
@@ -14,7 +15,8 @@ from paperscreen.webui import make_server, md_to_html
 
 @pytest.fixture
 def server(tmp_path, cfg):
-    c = cfg.with_overrides(db_path=str(tmp_path / "w.sqlite"), evaluation={"out_dir": str(tmp_path / "reports")})
+    c = cfg.with_overrides(db_path=str(tmp_path / "w.sqlite"), evaluation={"out_dir": str(tmp_path / "reports")},
+                           digest={"out_dir": str(tmp_path / "digests")})
     db = Database(c.db_path)
     for i in range(3):
         pid, _ = db.upsert_paper(Paper(title=f"Web paper {i} about {c.interests[0].description[:30]}",
@@ -148,3 +150,38 @@ def test_monitor_endpoint(server):
 def test_md_to_html_italics_but_not_snake_case():
     out = md_to_html("_(empty)_ and no_abstract_% and `a_b_c`")
     assert "<em>(empty)</em>" in out and "no_abstract_%" in out and "<code>a_b_c</code>" in out
+
+
+def _wait_job(port):
+    for _ in range(100):
+        job = call(port, "GET", "/api/job")[1]
+        if not job["running"]:
+            return job
+        time.sleep(0.1)
+    raise AssertionError("job did not finish")
+
+
+def test_more_builds_next_batch_without_fetching(server, monkeypatch):
+    port, c = server
+
+    def no_fetch(*a, **k):
+        raise AssertionError("'more' must not fetch from the network")
+
+    monkeypatch.setattr(pipeline, "refresh", no_fetch)
+    today = datetime.now(timezone.utc).date().isoformat()
+    with Database(c.db_path) as db:
+        for i in range(40):
+            db.upsert_paper(Paper(title=f"Downloaded candidate number {i} on optimisation", abstract="loss landscape sgd",
+                                  published=today, source="arxiv", arxiv_id=f"2610.020{i:02d}"))
+    st = call(port, "GET", "/api/state")[1]
+    assert st["available"] == 40 and st["unlabeled"] == 3
+    assert st["cold_start"]["need_labels"] == c["model"]["min_labels"]
+    assert call(port, "POST", "/api/run", {"action": "more"}, POST)[1] == {"started": True}
+    job = _wait_job(port)
+    assert job["error"] is None and "more papers" in job["log"][-1]
+    st2 = call(port, "GET", "/api/state")[1]
+    shown = st2["unlabeled"] - 3
+    assert shown > 0 and st2["available"] == 40 - shown
+    call(port, "POST", "/api/run", {"action": "more"}, POST)
+    _wait_job(port)
+    assert call(port, "GET", "/api/state")[1]["available"] < st2["available"]  # a second batch, no repeats

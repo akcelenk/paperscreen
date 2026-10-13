@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database, utcnow_iso
-from .digest import _access_link
+from .digest import _access_link, candidates
 from .embeddings import EmbeddingStore
 from .rankers import Context
 
@@ -185,7 +185,13 @@ class WebApp:
         db = Database(self.cfg.db_path)
         try:
             lab = db.labels_frame()
+            m = self.cfg["model"]
+            n_pos = int(lab["label"].sum()) if len(lab) else 0
             return {
+                "available": len(candidates(db, self.cfg)),
+                "cold_start": {"labels": int(len(lab)), "need_labels": m["min_labels"],
+                               "pos": n_pos, "need_pos": m["min_positives"],
+                               "neg": int(len(lab)) - n_pos, "need_neg": m["min_negatives"]},
                 "papers": db.count_papers(), "labels": int(len(lab)),
                 "positives": int(lab["label"].sum()) if len(lab) else 0,
                 "unlabeled": len(db.unlabeled_impressions()),
@@ -245,6 +251,18 @@ class WebApp:
                     pipeline.refresh(self.cfg, db, ctx, log=log)
                 finally:
                     db.close()
+        elif action == "more":
+            from .digest import build_digest
+
+            def work(log):
+                db, ctx = open_session(self.cfg)
+                try:
+                    log("ranking the next batch from papers already downloaded...")
+                    dg = build_digest(db, self.cfg, ctx)
+                    log(f"{len(dg.entries)} more papers ({dg.model_id})" if dg.entries
+                        else "no unseen papers left in the look-back window: fetch new papers")
+                finally:
+                    db.close()
         elif action == "report":
             from .evaluation import evaluate
 
@@ -257,7 +275,7 @@ class WebApp:
                 finally:
                     db.close()
         else:
-            raise ValueError("action must be 'refresh' or 'report'")
+            raise ValueError("action must be 'refresh', 'more' or 'report'")
         return {"started": self.job.start(action, work)}
 
     def monitor(self) -> dict:

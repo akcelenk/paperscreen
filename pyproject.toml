@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperscreen"
-version = "0.2.0"
+version = "0.3.0"
 description = "Personal research-paper screening and ranking with a leakage-aware evaluation harness"
 readme = "README.md"
 requires-python = ">=3.10"

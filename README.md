@@ -29,7 +29,10 @@ paperscreen app                        # opens http://127.0.0.1:8765 in your bro
 ```
 
 In the app: **Fetch new papers and build digest**, then judge papers one at a time with the buttons
-or the keyboard (`y` interesting, `n` not, `s` skip, `z` undo, `1`-`5` toggle interest tags). The
+or the keyboard (`y` interesting, `n` not, `s` skip, `z` undo, `1`-`5` toggle interest tags, `m` next
+batch from papers already downloaded, no network). There is no daily quota: judge as many as you like
+in one sitting (the header shows how many unseen papers are left and when the model starts learning),
+then settle into a weekly rhythm once the model is warm. The
 **Report** tab runs the offline evaluation; the **Monitor** tab shows how the live system is doing. `scripts/start.bat` (Windows) and
 `scripts/start.sh` (macOS/Linux) start the app with a double click once it is installed.
 The app listens on 127.0.0.1 only, rejects foreign Host headers and cross-site posts, and your data

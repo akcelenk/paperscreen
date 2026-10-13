@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 (2026-10-13)
+
+Added
+- "More papers" (key `m`): the next ranked batch from papers already downloaded, without fetching,
+  so you can label as many papers as you like in one sitting. The model is refitted for every batch.
+- The header shows how many unseen papers are left and how far the model is from leaving cold start.
+
+Changed
+- `digest.lookback_days` default 3 -> 7, so a weekly rhythm does not skip papers.
+
 ## 0.2.0 (2026-10-13)
 
 Fixed

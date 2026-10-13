@@ -83,14 +83,25 @@ def _access_link(p: Paper, proxy_prefix: str | None) -> str:
     return f"{proxy_prefix}{target}" if proxy_prefix and target else ""
 
 
+def candidates(db: Database, cfg: Config, today: date | None = None) -> list[Paper]:
+    """Papers inside the look-back window that were never shown and never labelled."""
+    today = today or datetime.now(timezone.utc).date()
+    since = (today - timedelta(days=cfg["digest"]["lookback_days"])).isoformat()
+    shown, labeled = db.shown_ids(), db.labeled_ids()
+    return [p for p in db.query_papers("published >= ?", (since,))
+            if p.paper_id not in shown and p.paper_id not in labeled]
+
+
 def build_digest(db: Database, cfg: Config, ctx: Context, today: date | None = None,
                  write: bool = True) -> Digest:
+    """Rank the current candidates and log one batch of impressions.
+
+    Calling it again right away gives the next batch from the papers still unseen (the "more"
+    button), refitting the model on every label made so far.
+    """
     today = today or datetime.now(timezone.utc).date()
     dc = cfg["digest"]
-    since = (today - timedelta(days=dc["lookback_days"])).isoformat()
-    shown, labeled = db.shown_ids(), db.labeled_ids()
-    cands = [p for p in db.query_papers("published >= ?", (since,))
-             if p.paper_id not in shown and p.paper_id not in labeled]
+    cands = candidates(db, cfg, today)
     if not cands:
         return Digest(today.isoformat(), "none", [], 0, markdown=f"# Digest {today}\n\nNo new candidates.\n")
 

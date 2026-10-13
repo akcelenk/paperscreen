@@ -32,6 +32,9 @@
   button.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px;
                    padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer; }
   button.primary:disabled { opacity: .5; cursor: default; }
+  button.secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary:disabled { opacity: .5; cursor: default; }
   .log { color: var(--muted); font-size: 13px; white-space: pre-wrap; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px;
           box-shadow: var(--shadow); }
@@ -79,6 +82,7 @@
   <section id="view-review">
     <div class="bar">
       <button class="primary" id="refresh">Fetch new papers and build digest</button>
+      <button class="secondary" id="more">More papers (m)</button>
       <span class="log" id="joblog"></span>
     </div>
     <div class="progress" id="progress"></div>
@@ -121,9 +125,16 @@ function el(tag, attrs = {}, ...kids) {
   return e;
 }
 
+function statsText(s) {
+  const c = s.cold_start;
+  const learn = (c.labels >= c.need_labels && c.pos >= c.need_pos && c.neg >= c.need_neg)
+    ? 'model: learning from your labels'
+    : `model starts learning at ${c.need_labels} labels incl. ${c.need_pos} yes / ${c.need_neg} no`;
+  return `${s.labels} labels (${s.positives} yes) · ${s.unlabeled} waiting · ${s.available} more available · ${learn}`;
+}
 async function loadState() {
   state = await api('/api/state');
-  $('stats').textContent = `${state.labels} labels (${state.positives} yes) · ${state.unlabeled} waiting`;
+  $('stats').textContent = statsText(state);
   showJob(state.job);
 }
 
@@ -141,10 +152,14 @@ function render() {
   const box = $('card'); box.replaceChildren();
   $('progress').textContent = items.length ? `${Math.min(idx + 1, items.length)} of ${items.length}` : '';
   if (idx >= items.length) {
+    const more = state && state.available > 0;
     const msg = items.length
-      ? 'All judged. Run the digest again tomorrow, or fetch more now.'
-      : 'Nothing to review yet. Fetch new papers to build a digest.';
+      ? (more ? `All judged. ${state.available} more downloaded papers are waiting: press m for the next batch.`
+              : 'All judged. Fetch new papers for more.')
+      : (more ? `${state.available} downloaded papers are waiting: press m to start.`
+              : 'Nothing to review yet. Fetch new papers to build a digest.');
     box.append(el('div', {class: 'empty', text: msg}));
+    if (more) box.append(el('div', {class: 'actions'}, el('button', {class: 'yes', text: 'More papers (m)', onclick: moreClick})));
     if (history.length) box.append(el('div', {class: 'actions'}, el('button', {text: 'Undo last (z)', onclick: undo})));
     return;
   }
@@ -171,7 +186,7 @@ function render() {
       el('button', {class: 'no', text: 'Not for me (n)', onclick: () => judge(0)}),
       el('button', {text: 'Skip (s)', onclick: skip}),
       el('button', {text: 'Undo (z)', onclick: undo})),
-    el('div', {class: 'hint', text: 'Keys: y / n / s / z, and 1-5 to toggle tags. Judge each paper on its own.'})));
+    el('div', {class: 'hint', text: 'Keys: y / n / s / z, 1-5 to toggle tags, m for the next batch. Judge each paper on its own.'})));
 }
 
 function toggle(id) { selected.has(id) ? selected.delete(id) : selected.add(id); render(); }
@@ -193,13 +208,12 @@ async function undo() {
     startItem(); render(); loadStateQuiet();
   } catch (e) { alert(e.message); } finally { busy = false; }
 }
-async function loadStateQuiet() { try { state = await api('/api/state'); $('stats').textContent =
-  `${state.labels} labels (${state.positives} yes) · ${state.unlabeled} waiting`; } catch (e) {} }
+async function loadStateQuiet() { try { state = await api('/api/state'); $('stats').textContent = statsText(state); } catch (e) {} }
 
 document.addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey || $('view-review').hidden) return;
   if (e.key === 'y') judge(1); else if (e.key === 'n') judge(0);
-  else if (e.key === 's') skip(); else if (e.key === 'z') undo();
+  else if (e.key === 's') skip(); else if (e.key === 'z') undo(); else if (e.key === 'm') moreClick();
   else if (/^[1-9]$/.test(e.key) && state && state.interests[+e.key - 1]) toggle(state.interests[+e.key - 1].id);
 });
 
@@ -208,7 +222,7 @@ let polling = null;
 function showJob(j) {
   const text = j && j.name ? `${j.running ? 'Working: ' : j.error ? 'Failed: ' : 'Done: '}${j.error || (j.log || []).slice(-3).join('  ·  ')}` : '';
   $('joblog').textContent = $('joblog2').textContent = text;
-  $('refresh').disabled = $('run-report').disabled = !!(j && j.running);
+  $('refresh').disabled = $('run-report').disabled = $('more').disabled = !!(j && j.running);
 }
 function watchJob(action) {
   clearInterval(polling);
@@ -216,7 +230,7 @@ function watchJob(action) {
     const j = await api('/api/job'); showJob(j);
     if (!j.running) {
       clearInterval(polling);
-      if (action === 'refresh' && !j.error) { await loadItems(); await loadStateQuiet(); }
+      if ((action === 'refresh' || action === 'more') && !j.error) { await loadStateQuiet(); await loadItems(); }
       if (action === 'report') loadReport();
     }
   }, 1500);
@@ -228,6 +242,8 @@ async function startJob(action) {
   watchJob(action);
 }
 $('refresh').onclick = () => startJob('refresh').catch(e => alert(e.message));
+function moreClick() { if (!$('more').disabled) startJob('more').catch(e => alert(e.message)); }
+$('more').onclick = moreClick;
 $('run-report').onclick = () => startJob('report').catch(e => alert(e.message));
 
 // ---- report -------------------------------------------------------------------------------
