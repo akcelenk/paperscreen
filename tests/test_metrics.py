@@ -53,3 +53,8 @@ def test_holm_matches_hand_calculation():
     adj = holm({"a": 0.01, "b": 0.04, "c": 0.03})
     assert adj["a"] == pytest.approx(0.03) and adj["c"] == pytest.approx(0.06) and adj["b"] == pytest.approx(0.06)
     assert np.isnan(holm({"x": float("nan"), "y": 0.5})["x"])
+
+
+def test_single_window_has_no_interval():
+    m, lo, hi = mean_ci(np.array([0.7]), n_boot=100)
+    assert m == 0.7 and lo != lo and hi != hi  # NaN, never a zero-width interval

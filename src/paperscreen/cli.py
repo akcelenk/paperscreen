@@ -41,6 +41,9 @@ def main(ctx: click.Context, config_path: str | None) -> None:
 
 
 def _cfg(ctx: click.Context) -> Config:
+    if ctx.obj["config_path"] is None and not Path("config.yaml").exists():
+        click.echo(f"note: no config.yaml in {Path.cwd()}; using the defaults and the database under this folder. "
+                   "Run paperscreen from the project folder (or use the desktop shortcut) to see your own data.", err=True)
     try:
         return load_config(ctx.obj["config_path"])
     except (ConfigError, FileNotFoundError) as exc:
@@ -76,7 +79,7 @@ def fetch(ctx: click.Context, days: int | None, only: tuple[str, ...]) -> None:
     sources, skipped = build_sources(cfg, list(only) or None)
     for s in skipped:
         click.echo(f"{s.source}: skipped ({s.skipped})")
-    for r in fetch_all(db, sources, days=days):
+    for r in fetch_all(db, sources, days=days, max_catchup_days=cfg["sources"].get("max_catchup_days", 60)):
         if r.error:
             click.echo(f"{r.source}: ERROR {r.error}")
         else:

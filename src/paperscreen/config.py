@@ -72,6 +72,7 @@ def validate(raw: dict) -> None:
                  "digest.lookback_days", "evaluation.min_train_labels", "evaluation.n_boot"):
         num(path, 0, None, integer=True)
     num("digest.per_interest", 1, None, integer=True)
+    num("sources.max_catchup_days", 1, 365, integer=True)
     num("evaluation.step_days", 1, None, integer=True)
     num("evaluation.test_fraction", 0.01, 0.99)
     for i, pair in enumerate((raw.get("evaluation") or {}).get("primary") or []):

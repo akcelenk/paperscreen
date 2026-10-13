@@ -152,3 +152,23 @@ def test_kaggle_import(tmp_path):
     got = list(import_kaggle_jsonl(f, since=date(2024, 1, 1), categories=["cs.LG"]))
     assert [p.arxiv_id for p in got] == ["2401.00001"] and got[0].published == "2024-01-01"
     assert got[0].title == "In scope"
+
+
+class _DaysSource(Source):
+    name = "days"
+
+    def __init__(self):
+        self.calls = []
+
+    def fetch(self, since, until=None):
+        self.calls.append(since)
+        return iter(())
+
+
+def test_long_break_catches_up_instead_of_skipping_days(db):
+    src = _DaysSource()
+    db.kv_set("watermark:days", "2026-08-01")
+    fetch_all(db, [src], today=date(2026, 9, 10))  # 40 days away: everything since the mark (minus overlap)
+    assert src.calls[-1] == date(2026, 7, 29)
+    fetch_all(db, [src], today=date(2026, 12, 1), max_catchup_days=60)  # but never more than the cap
+    assert src.calls[-1] == date(2026, 10, 2)

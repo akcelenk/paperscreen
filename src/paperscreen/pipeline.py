@@ -18,7 +18,8 @@ def refresh(cfg: Config, db: Database, ctx: Context, days: int | None = None,
     sources, skipped = build_sources(cfg)
     for s in skipped:
         log(f"{s.source}: skipped ({s.skipped})")
-    for r in fetch_all(db, sources, days=days, today=today):
+    for r in fetch_all(db, sources, days=days, today=today,
+                       max_catchup_days=cfg["sources"].get("max_catchup_days", 60)):
         log(f"{r.source}: ERROR {r.error}" if r.error else f"{r.source}: {r.fetched} fetched, {r.new} new")
         if r.warning:
             log(f"{r.source}: WARNING {r.warning}")

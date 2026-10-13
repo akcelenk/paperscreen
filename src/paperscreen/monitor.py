@@ -117,7 +117,8 @@ def build_monitor(db: Database, registry_dir: str | None = None, today: date | N
     imp = _first_impressions(db)
     weekly, pooled = online_quality(imp)
     quality = data_quality(db, today)
-    unl = imp[imp["label"].isna()]
+    skipped = {r[0] for r in db.conn.execute("SELECT paper_id FROM skips")}
+    unl = imp[imp["label"].isna() & ~imp["paper_id"].isin(skipped)]  # skipped papers are not a backlog
     oldest = int((today - unl["day"].min()).days) if len(unl) and pd.notna(unl["day"].min()) else None
     week_ago = (today - timedelta(days=7)).isoformat()
     n7 = int((imp["labeled_at"].fillna("") >= week_ago).sum())

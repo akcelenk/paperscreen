@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database, utcnow_iso
-from .digest import _access_link, candidates
+from .digest import _access_link, candidate_since
 from .embeddings import EmbeddingStore
 from .rankers import Context
 from .text import paper_text, text_hash
@@ -167,6 +167,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.app.label(body))
             if path == "/api/unlabel":
                 return self._json(self.app.unlabel(body))
+            if path == "/api/skip":
+                return self._json(self.app.skip(body))
             if path == "/api/run":
                 return self._json(self.app.run(body))
             return self._json({"error": "not found"}, 404)
@@ -189,7 +191,7 @@ class WebApp:
             m = self.cfg["model"]
             n_pos = int(lab["label"].sum()) if len(lab) else 0
             return {
-                "available": len(candidates(db, self.cfg)),
+                "available": db.count_candidates(candidate_since(self.cfg)),
                 "cold_start": {"labels": int(len(lab)), "need_labels": m["min_labels"],
                                "pos": n_pos, "need_pos": m["min_positives"],
                                "neg": int(len(lab)) - n_pos, "need_neg": m["min_negatives"]},
@@ -232,6 +234,17 @@ class WebApp:
                 raise ValueError("unknown paper id")
             db.set_label(pid, label, tags if label == 1 else [], utcnow_iso(), opened=opened,
                          text_hash=text_hash(paper_text(found[0])))
+        finally:
+            db.close()
+        return {"ok": True}
+
+    def skip(self, body: dict) -> dict:
+        pid = str(body.get("id", ""))
+        db = Database(self.cfg.db_path)
+        try:
+            if not db.get_papers([pid]):
+                raise ValueError("unknown paper id")
+            db.unskip(pid) if body.get("undo") else db.skip(pid)
         finally:
             db.close()
         return {"ok": True}

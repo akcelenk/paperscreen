@@ -188,3 +188,15 @@ def test_more_builds_next_batch_without_fetching(server, monkeypatch):
     call(port, "POST", "/api/run", {"action": "more"}, POST)
     _wait_job(port)
     assert call(port, "GET", "/api/state")[1]["available"] < st2["available"]  # a second batch, no repeats
+
+
+def test_skip_and_undo_skip(server):
+    port, _ = server
+    _, items = call(port, "GET", "/api/items")
+    pid = items[0]["id"]
+    assert call(port, "POST", "/api/skip", {"id": pid}, POST)[0] == 200
+    assert pid not in {i["id"] for i in call(port, "GET", "/api/items")[1]}
+    assert call(port, "GET", "/api/state")[1]["unlabeled"] == 2
+    call(port, "POST", "/api/skip", {"id": pid, "undo": True}, POST)
+    assert call(port, "GET", "/api/state")[1]["unlabeled"] == 3
+    assert call(port, "POST", "/api/skip", {"id": "nope"}, POST)[0] == 400

@@ -59,6 +59,7 @@ def build_sources(cfg: Config, only: list[str] | None = None) -> tuple[list[Sour
 
 def fetch_all(
     db: Database, sources: list[Source], days: int | None = None, today: date | None = None,
+    max_catchup_days: int = 60,
 ) -> list[FetchResult]:
     """Fetch every source since its watermark (or ``days`` back) and upsert with deduplication."""
     today = today or datetime.now(timezone.utc).date()
@@ -69,8 +70,9 @@ def fetch_all(
         if days is not None:
             since = today - timedelta(days=days)
         elif mark:
-            # Overlap by 3 days (indexing lags, weekends) but never look back more than 14 days.
-            since = max(date.fromisoformat(mark) - timedelta(days=3), today - timedelta(days=14))
+            # Overlap by 3 days (indexing lags, weekends). After a long break, catch up on everything
+            # since the last run, up to max_catchup_days, so no stretch of days is silently skipped.
+            since = max(date.fromisoformat(mark) - timedelta(days=3), today - timedelta(days=max_catchup_days))
         else:
             since = today - timedelta(days=7)
         newest = ""

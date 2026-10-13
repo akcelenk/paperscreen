@@ -25,14 +25,16 @@ python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\a
 pip install -e ".[embed,plots]"        # drop `embed` to use only the dependency-free hashing embedder
 paperscreen init --write-config        # creates config.yaml: edit interests, contact_email, proxy link
 export OPENALEX_API_KEY=...            # free key; OpenAlex is skipped without it
+paperscreen refresh --days 60          # first run only: two months of papers to learn from (~20-30 min)
 paperscreen app                        # opens http://127.0.0.1:8765 in your browser
 ```
 
 In the app: **Fetch new papers and build digest**, then judge papers one at a time with the buttons
-or the keyboard (`y` interesting, `n` not, `s` skip, `z` undo, `1`-`5` toggle interest tags, `m` next
-batch from papers already downloaded, no network). There is no daily quota: judge as many as you like
-in one sitting (the header shows how many unseen papers are left and when the model starts learning),
-then settle into a weekly rhythm once the model is warm. The
+or the keyboard (`y` interesting, `n` not, `s` not sure (it will not come back), `z` undo, `1`-`5`
+toggle interest tags, `m` next batch from papers already downloaded, no network). There is no schedule
+and no quota: open it whenever you like, judge as many as you like (the header shows how many unseen
+papers are left and when the model starts learning). After a break, **Fetch** catches up on everything
+since the last run (up to `sources.max_catchup_days`, 60 by default). The
 **Report** tab runs the offline evaluation; the **Monitor** tab shows how the live system is doing. `scripts/start.bat` (Windows) and
 `scripts/start.sh` (macOS/Linux) start the app with a double click once it is installed.
 The app listens on 127.0.0.1 only, rejects foreign Host headers and cross-site posts, and your data

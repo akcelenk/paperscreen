@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS embeddings (
     PRIMARY KEY (paper_id, model_key)
 );
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS skips (
+    paper_id   TEXT PRIMARY KEY REFERENCES papers(paper_id) ON DELETE CASCADE,
+    skipped_at TEXT NOT NULL
+);
 """
 
 REASONS = ("exploit", "random", "uncertain", "coldstart")
@@ -256,6 +260,7 @@ class Database:
         now = labeled_at or utcnow_iso()
         tag_str = " ".join(dict.fromkeys(tags))
         with self.conn:
+            self.conn.execute("DELETE FROM skips WHERE paper_id=?", (paper_id,))
             self.conn.execute(
                 "INSERT INTO labels (paper_id,label,tags,labeled_at,updated_at,origin,opened,text_hash) "
                 "VALUES (?,?,?,?,?,?,?,?) "
@@ -281,6 +286,24 @@ class Database:
         df = pd.read_sql_query(sql, self.conn, params=params)
         df["tags"] = df["tags"].map(lambda s: tuple(s.split()) if s else ())
         return df
+
+    def skip(self, paper_id: str, at: str | None = None) -> None:
+        """'Not sure': the paper leaves the waiting list without becoming a label."""
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO skips (paper_id, skipped_at) VALUES (?, ?)",
+                              (paper_id, at or utcnow_iso()))
+
+    def unskip(self, paper_id: str) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM skips WHERE paper_id=?", (paper_id,))
+
+    def count_candidates(self, since: str) -> int:
+        """Papers published since ``since`` that were never shown or labelled (fast, for the header)."""
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM papers p WHERE p.published >= ? "
+            "AND NOT EXISTS (SELECT 1 FROM impressions i WHERE i.paper_id=p.paper_id) "
+            "AND NOT EXISTS (SELECT 1 FROM labels l WHERE l.paper_id=p.paper_id)", (since,)
+        ).fetchone()[0]
 
     def delete_label(self, paper_id: str) -> None:
         """Undo a judgement: the paper goes back to the unlabelled queue."""
@@ -308,7 +331,8 @@ class Database:
         rows = self.conn.execute(
             "SELECT p.* FROM papers p JOIN (SELECT paper_id, MIN(shown_at) s, MIN(id) i FROM impressions "
             "GROUP BY paper_id) im ON im.paper_id=p.paper_id LEFT JOIN labels l ON l.paper_id=p.paper_id "
-            "WHERE l.paper_id IS NULL ORDER BY im.s, im.i"
+            "LEFT JOIN skips k ON k.paper_id=p.paper_id "
+            "WHERE l.paper_id IS NULL AND k.paper_id IS NULL ORDER BY im.s, im.i"
         ).fetchall()
         return [_row_to_paper(r) for r in rows]
 

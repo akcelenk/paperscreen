@@ -83,6 +83,11 @@ def _access_link(p: Paper, proxy_prefix: str | None) -> str:
     return f"{proxy_prefix}{target}" if proxy_prefix and target else ""
 
 
+def candidate_since(cfg: Config, today: date | None = None) -> str:
+    today = today or datetime.now(timezone.utc).date()
+    return (today - timedelta(days=cfg["digest"]["lookback_days"])).isoformat()
+
+
 def candidates(db: Database, cfg: Config, today: date | None = None) -> list[Paper]:
     """Papers inside the look-back window that were never shown and never labelled."""
     today = today or datetime.now(timezone.utc).date()
@@ -106,7 +111,11 @@ def build_digest(db: Database, cfg: Config, ctx: Context, today: date | None = N
     if not cands:
         return Digest(today.isoformat(), "none", [], 0, markdown=f"# Digest {today}\n\nNo new candidates.\n")
 
-    data = training_data(db, exclude={p.paper_id for p in cands})
+    # Random weak negatives come from every unlabelled paper except those already waiting for your
+    # judgement (the live analogue of the evaluation's test window). Excluding all candidates instead
+    # emptied the pool whenever the look-back window covered most of the database, e.g. right after
+    # the first fetch, silently turning off the random negatives the model was evaluated with.
+    data = training_data(db, exclude={p.paper_id for p in db.unlabeled_impressions()})
     t0 = time.perf_counter()
     ranker, ranker_type = build_active_ranker(cfg["model"], ctx, data)
     fit_seconds = time.perf_counter() - t0

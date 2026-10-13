@@ -200,15 +200,22 @@ async function judge(label) {
   try {
     const p = items[idx];
     await api('/api/label', {id: p.id, label, tags: label ? [...selected] : [], opened});
-    history.push(idx); idx++; startItem(); render(); loadStateQuiet();
+    history.push({i: idx, kind: 'label'}); idx++; startItem(); render(); loadStateQuiet();
   } catch (e) { alert(e.message); } finally { busy = false; }
 }
-function skip() { if (idx < items.length) { idx++; startItem(); render(); } }
+async function skip() {  // remembered, so a skipped paper does not come back on the next visit
+  if (busy || idx >= items.length) return; busy = true;
+  try {
+    await api('/api/skip', {id: items[idx].id});
+    history.push({i: idx, kind: 'skip'}); idx++; startItem(); render(); loadStateQuiet();
+  } catch (e) { alert(e.message); } finally { busy = false; }
+}
 async function undo() {
   if (busy || !history.length) return; busy = true;
   try {
-    idx = history.pop();
-    await api('/api/unlabel', {id: items[idx].id});
+    const h = history.pop(); idx = h.i;
+    if (h.kind === 'skip') await api('/api/skip', {id: items[idx].id, undo: true});
+    else await api('/api/unlabel', {id: items[idx].id});
     startItem(); render(); loadStateQuiet();
   } catch (e) { alert(e.message); } finally { busy = false; }
 }
@@ -254,7 +261,7 @@ $('run-report').onclick = () => startJob('report').catch(e => alert(e.message));
 async function loadReport() {
   const r = await api('/api/report');
   const box = $('report');
-  if (!r.html) { box.textContent = 'No report yet. Run the evaluation (it needs at least ~50 labels to say anything).'; return; }
+  if (!r.html) { box.textContent = 'No report yet. The learning curve needs ~100 labels; the week-by-week comparison needs labels made over at least 3-4 different weeks.'; return; }
   box.innerHTML = r.html;  // produced by the server from escaped Markdown
 }
 async function loadMonitor() {

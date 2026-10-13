@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 (2026-10-13)
+
+Fixed
+- The live model's random weak negatives came only from papers outside the look-back window, so the
+  pool was empty right after a wide first fetch (and in the first week of any database). It now holds
+  out only papers waiting for a judgement, as the evaluation does.
+- After a break longer than 14 days, the fetch silently skipped the days in between. It now catches up
+  on everything since the last run, up to `sources.max_catchup_days` (default 60).
+- Skipped papers came back at the top of the list on every visit. Skips are now stored (and undoable).
+- With a single evaluation window the report showed a zero-width interval; it now shows none and says
+  that comparisons need labels from several weeks.
+- The header count of unseen papers re-read every candidate after each judgement; it is a SQL count now.
+
+Changed
+- `digest.lookback_days` default 60: no need to switch settings after the first weeks.
+- Running the CLI outside the project folder prints a note instead of silently using an empty database.
+
 ## 0.4.0 (2026-10-13)
 
 Fixed

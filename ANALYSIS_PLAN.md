@@ -71,3 +71,9 @@ fusion, prototype `k`. Report with uncorrected intervals and the label "explorat
   candidate pool is complete. Model hyperparameters stay as fixed above: Scholar Inbox's published
   values were considered and not adopted, because their S and V are parametrised differently.
   Hypotheses unchanged.
+* 2026-10-13 (before any real labels): two fixes. (1) The live system drew its random weak negatives
+  only from papers outside the look-back window, which left the pool empty after a wide first fetch;
+  it now holds out only papers waiting for a judgement, matching the evaluation. (2) A single weekly
+  window now reports no interval instead of a zero-width one; comparisons need >= 2 windows and the
+  report says so. Labels made in one burst fall into one window, so confirmatory runs (300/1000/3000
+  labels) also require labels from at least 4 different weeks.

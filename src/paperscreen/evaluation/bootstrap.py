@@ -10,11 +10,17 @@ def _indices(n_units: int, n_boot: int, seed: int) -> np.ndarray:
 
 
 def mean_ci(values: np.ndarray, n_boot: int = 2000, seed: int = 0, alpha: float = 0.05):
-    """Mean of per-window values with a percentile cluster-bootstrap CI (windows are resampled)."""
+    """Mean of per-window values with a percentile cluster-bootstrap CI (windows are resampled).
+
+    With fewer than two windows there is no between-window variation to resample, so the interval is
+    undefined (NaN) rather than a misleading zero-width interval around the single value.
+    """
     v = np.asarray(values, dtype=float)
     v = v[~np.isnan(v)]
     if len(v) == 0:
         return float("nan"), float("nan"), float("nan")
+    if len(v) < 2:
+        return float(v.mean()), float("nan"), float("nan")
     boots = v[_indices(len(v), n_boot, seed)].mean(axis=1)
     lo, hi = np.percentile(boots, [100 * alpha / 2, 100 * (1 - alpha / 2)])
     return float(v.mean()), float(lo), float(hi)

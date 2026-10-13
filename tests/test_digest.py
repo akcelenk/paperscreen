@@ -104,3 +104,48 @@ def test_no_uncertain_arm_during_cold_start(cfg, tmp_path):
     dg = build_digest(db, cfg.with_overrides(digest={"out_dir": str(tmp_path)}), ctx, today=date(2026, 10, 13))
     assert dg.model_id.startswith("zeroshot") and {e.reason for e in dg.entries} <= {"coldstart", "random"}
     db.close()
+
+
+def test_random_negative_pool_survives_a_wide_lookback(demo_db, cfg, tmp_path, monkeypatch):
+    """Right after a big first fetch every paper is a candidate; the pool must not go empty."""
+    import paperscreen.digest as digest_mod
+
+    db, last = demo_db
+    seen = []
+    orig = digest_mod.build_active_ranker
+
+    def spy(cfg_model, ctx, data):
+        seen.append(len(data.pool))
+        return orig(cfg_model, ctx, data)
+
+    monkeypatch.setattr(digest_mod, "build_active_ranker", spy)
+    c = cfg.with_overrides(digest={"out_dir": str(tmp_path), "lookback_days": 3650})
+    build_digest(db, c, make_ctx(db, c), today=last)
+    n_unlabeled = db.count_papers() - len(db.labels_frame())
+    assert seen[0] > 0.9 * n_unlabeled
+    waiting = {p.paper_id for p in db.unlabeled_impressions()}
+    build_digest(db, c, make_ctx(db, c), today=last)
+    assert seen[1] == n_unlabeled - len(waiting)  # only papers waiting for a judgement are held out
+
+
+def test_candidate_count_matches_candidate_list(demo_db, cfg):
+    from paperscreen.digest import candidate_since, candidates
+
+    db, last = demo_db
+    c = cfg.with_overrides(digest={"lookback_days": 20})
+    assert db.count_candidates(candidate_since(c, last)) == len(candidates(db, c, last)) > 0
+
+
+def test_skipped_papers_leave_the_waiting_list(demo_db, cfg, tmp_path):
+    db, last = demo_db
+    c = cfg.with_overrides(digest={"out_dir": str(tmp_path)})
+    build_digest(db, c, make_ctx(db, c), today=last)
+    waiting = db.unlabeled_impressions()
+    first = waiting[0].paper_id
+    db.skip(first)
+    assert first not in {p.paper_id for p in db.unlabeled_impressions()}
+    db.unskip(first)
+    assert first in {p.paper_id for p in db.unlabeled_impressions()}
+    db.skip(first)
+    db.set_label(first, 1)  # judging a skipped paper later clears the skip
+    assert db.conn.execute("SELECT COUNT(*) FROM skips").fetchone()[0] == 0

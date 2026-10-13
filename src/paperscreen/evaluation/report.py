@@ -31,12 +31,16 @@ def _section(title: str, summary: dict | None, note: str, min_interest_pos: int)
         out += ["_Not enough data for this evaluation yet._", ""]
         return "\n".join(out)
     mt = summary["map_table"].copy()
-    mt["MAP (95% CI)"] = mt.apply(lambda r: f"{r['map']:.3f} [{r['map_lo']:.3f}, {r['map_hi']:.3f}]", axis=1)
+    mt["MAP (95% CI)"] = mt.apply(lambda r: f"{r['map']:.3f} [{r['map_lo']:.3f}, {r['map_hi']:.3f}]"
+                                  if r["map_lo"] == r["map_lo"] else f"{r['map']:.3f} [no interval]", axis=1)
     out += [
         f"Windows used: {summary['n_windows_used']} of {summary['n_windows_total']} "
         f"(a window needs at least one positive and one negative). "
         f"Test labels: {summary['n_test_labels']}, of which {summary['n_test_pos']} positive.",
         "",
+        *([f"> Only {summary['n_windows_used']} weekly window(s) so far: intervals and comparisons need at least "
+           "2 and become useful from about 4. Labels made in one burst all fall into the same week; "
+           "keep judging over the coming weeks.", ""] if summary["n_windows_used"] < 4 else []),
         md_table(mt[["ranker", "MAP (95% CI)", "p_at_k", "ndcg"]]),
         "",
         "### Primary comparisons (pre-registered in ANALYSIS_PLAN.md, Holm-corrected)",
