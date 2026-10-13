@@ -1,5 +1,7 @@
 # paperscreen
 
+[![ci](https://github.com/akcelenk/paperscreen/actions/workflows/ci.yml/badge.svg)](https://github.com/akcelenk/paperscreen/actions/workflows/ci.yml)
+
 A personal screening and ranking system for new research papers. It pulls fresh papers from
 arXiv, PubMed and OpenAlex, shows you a short daily digest, learns from your yes/no judgements,
 and measures honestly how much the learning helps.
