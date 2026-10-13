@@ -1,0 +1,10 @@
+# Used inside the container only: keep everything you want to survive a rebuild under data/.
+# To change interests, proxy_prefix or contact_email, edit data/config.yaml after the first start
+# (it is copied from here once and never overwritten).
+db_path: data/paperscreen.sqlite
+digest:
+  out_dir: data/digests
+evaluation:
+  out_dir: data/reports
+model:
+  registry_dir: data/models

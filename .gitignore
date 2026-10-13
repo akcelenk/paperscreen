@@ -13,7 +13,7 @@ digests/
 models/
 reports/
 runs/
-config.yaml
+/config.yaml
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
