@@ -24,6 +24,7 @@ from .db import Database, utcnow_iso
 from .digest import _access_link, candidates
 from .embeddings import EmbeddingStore
 from .rankers import Context
+from .text import paper_text, text_hash
 
 ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 
@@ -223,11 +224,14 @@ class WebApp:
         tags = [t for t in body.get("tags", []) if t in self.cfg.interest_ids]
         if label not in (0, 1) or not isinstance(pid, str):
             raise ValueError("need id and label 0/1")
+        opened = body.get("opened") if isinstance(body.get("opened"), bool) else None
         db = Database(self.cfg.db_path)
         try:
-            if not db.get_papers([pid]):
+            found = db.get_papers([pid])
+            if not found:
                 raise ValueError("unknown paper id")
-            db.set_label(pid, label, tags if label == 1 else [], utcnow_iso())
+            db.set_label(pid, label, tags if label == 1 else [], utcnow_iso(), opened=opened,
+                         text_hash=text_hash(paper_text(found[0])))
         finally:
             db.close()
         return {"ok": True}

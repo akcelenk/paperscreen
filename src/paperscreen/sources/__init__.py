@@ -25,6 +25,7 @@ class FetchResult:
     new: int = 0
     error: str | None = None
     skipped: str | None = None
+    warning: str | None = None
 
 
 def build_sources(cfg: Config, only: list[str] | None = None) -> tuple[list[Source], list[FetchResult]]:
@@ -39,8 +40,8 @@ def build_sources(cfg: Config, only: list[str] | None = None) -> tuple[list[Sour
 
     if wanted("arxiv"):
         a = sc["arxiv"]
-        sources.append(ArxivSource(a["categories"], page_size=a.get("page_size", 100),
-                                   max_papers=a.get("max_papers", 3000), contact=email))
+        sources.append(ArxivSource(a["categories"], page_size=a.get("page_size", 500),
+                                   max_per_day=a.get("max_per_day", a.get("max_papers", 3000)), contact=email))
     if wanted("pubmed"):
         p = sc["pubmed"]
         sources.append(PubMedSource(p["queries"], api_key=cfg.secret("NCBI_API_KEY"), email=email,
@@ -85,6 +86,10 @@ def fetch_all(
             # lags (arXiv over weekends), the next run still covers the days that are missing.
             if newest:
                 db.kv_set(f"watermark:{src.name}", newest)
+            cut = getattr(src, "truncated_days", None)
+            db.kv_set(f"truncated:{src.name}", ",".join(cut or []))  # read by the monitor
+            if cut:
+                res.warning = f"hit the per-day cap on {', '.join(cut)}: some papers of those days are missing"
         except Exception as exc:  # one broken source must not stop the others
             res.error = f"{type(exc).__name__}: {exc}"
         results.append(res)

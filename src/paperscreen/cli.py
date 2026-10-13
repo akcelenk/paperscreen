@@ -81,6 +81,8 @@ def fetch(ctx: click.Context, days: int | None, only: tuple[str, ...]) -> None:
             click.echo(f"{r.source}: ERROR {r.error}")
         else:
             click.echo(f"{r.source}: {r.fetched} fetched, {r.new} new")
+        if r.warning:
+            click.echo(f"{r.source}: WARNING {r.warning}")
     click.echo(f"{db.count_papers()} papers in database")
 
 

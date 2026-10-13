@@ -27,15 +27,34 @@ def test_parse_arxiv_fixture():
     assert p.url.endswith("2610.13935")
 
 
-def test_arxiv_source_stops_at_since_and_paginates():
+def test_arxiv_queries_each_day_and_paginates():
     xml = (FIX / "arxiv_sample.xml").read_text()
-    s = FakeSession([FakeResponse(xml), FakeResponse(EMPTY_FEED)])
-    got = list(ArxivSource(["cs.LG"], http=_http(s), page_size=1).fetch(date(2026, 10, 1)))
-    assert len(got) == 1 and len(s.calls) == 2
-    s2 = FakeSession([FakeResponse(xml)])
-    assert list(ArxivSource(["cs.LG"], http=_http(s2)).fetch(date(2026, 10, 10))) == []  # all older than since
-    q = s.calls[0][1]["search_query"]
-    assert q == "cat:cs.LG" and s.calls[0][1]["sortBy"] == "submittedDate"
+
+    def handler(url, params):
+        # Day 2026-10-09 has one full page (page_size=1) then an empty page; other days are empty.
+        q, start = params["search_query"], params["start"]
+        return FakeResponse(xml if "20261009" in q and start == 0 else EMPTY_FEED)
+
+    s = FakeSession(handler=handler)
+    src = ArxivSource(["cs.LG", "stat.ML"], http=_http(s), page_size=1)
+    got = list(src.fetch(date(2026, 10, 8), date(2026, 10, 10)))
+    assert [p.arxiv_id for p in got] == ["2610.13935"]
+    queries = [c[1]["search_query"] for c in s.calls]
+    assert queries[0] == "(cat:cs.LG OR cat:stat.ML) AND submittedDate:[202610100000 TO 202610102359]"
+    days = [q.split("[")[1][:8] for q in queries]
+    assert days == ["20261010", "20261009", "20261009", "20261008"]  # newest day first, day 9 paged twice
+    assert src.truncated_days == []
+
+
+def test_arxiv_records_days_that_hit_the_cap(db):
+    xml = (FIX / "arxiv_sample.xml").read_text()
+    s = FakeSession(handler=lambda url, params: FakeResponse(xml))  # every page is full
+    src = ArxivSource(["cs.LG"], http=_http(s), page_size=1, max_per_day=3)
+    list(src.fetch(date(2026, 10, 9), date(2026, 10, 9)))
+    assert src.truncated_days == ["2026-10-09"] and len(s.calls) == 3
+    (res,) = fetch_all(db, [src], days=0, today=date(2026, 10, 9))
+    assert res.warning and "2026-10-09" in res.warning
+    assert db.kv_get("truncated:arxiv") == "2026-10-09"
 
 
 def test_parse_pubmed_fixture():

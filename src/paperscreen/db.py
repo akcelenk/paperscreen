@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS labels (
     tags       TEXT NOT NULL DEFAULT '',
     labeled_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    origin     TEXT NOT NULL DEFAULT 'human'
+    origin     TEXT NOT NULL DEFAULT 'human',
+    opened     INTEGER,          -- 1 if a link was opened before judging
+    text_hash  TEXT              -- hash of the title+abstract that was judged
 );
 CREATE TABLE IF NOT EXISTS impressions (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +49,10 @@ CREATE TABLE IF NOT EXISTS impressions (
     reason   TEXT NOT NULL,
     score    REAL,
     rank     INTEGER,
-    model_id TEXT
+    model_id TEXT,
+    propensity   REAL,           -- probability that this arm picked the paper (1.0 = deterministic)
+    n_candidates INTEGER,        -- size of the candidate pool when the batch was built
+    position     INTEGER         -- position inside the shown batch
 );
 CREATE INDEX IF NOT EXISTS idx_impr_paper ON impressions(paper_id);
 CREATE TABLE IF NOT EXISTS embeddings (
@@ -62,6 +67,12 @@ CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
 REASONS = ("exploit", "random", "uncertain", "coldstart")
+
+# Columns added after 0.2.0. Existing databases get them on open; old rows keep NULL.
+MIGRATIONS = {
+    "labels": {"opened": "INTEGER", "text_hash": "TEXT"},
+    "impressions": {"propensity": "REAL", "n_candidates": "INTEGER", "position": "INTEGER"},
+}
 
 
 def utcnow_iso() -> str:
@@ -105,6 +116,15 @@ class Database:
         if self.path != ":memory:":
             self.conn.execute("PRAGMA journal_mode = WAL")  # readers no longer block the writer
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        with self.conn:
+            for table, cols in MIGRATIONS.items():
+                have = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+                for col, typ in cols.items():
+                    if col not in have:
+                        self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
     def close(self) -> None:
         self.conn.close()
@@ -229,17 +249,21 @@ class Database:
     # ---- labels -------------------------------------------------------------------------
     def set_label(
         self, paper_id: str, label: int, tags: Sequence[str] = (), labeled_at: str | None = None,
-        origin: str = "human",
+        origin: str = "human", opened: bool | None = None,
+        text_hash: str | None = None,
     ) -> None:
         """Store a judgement. Re-labelling keeps the original ``labeled_at`` (evaluation time)."""
         now = labeled_at or utcnow_iso()
         tag_str = " ".join(dict.fromkeys(tags))
         with self.conn:
             self.conn.execute(
-                "INSERT INTO labels (paper_id,label,tags,labeled_at,updated_at,origin) VALUES (?,?,?,?,?,?) "
+                "INSERT INTO labels (paper_id,label,tags,labeled_at,updated_at,origin,opened,text_hash) "
+                "VALUES (?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(paper_id) DO UPDATE SET label=excluded.label, tags=excluded.tags, "
-                "updated_at=excluded.updated_at, origin=excluded.origin",
-                (paper_id, int(label), tag_str, now, now, origin),
+                "updated_at=excluded.updated_at, origin=excluded.origin, "
+                "opened=excluded.opened, text_hash=excluded.text_hash",
+                (paper_id, int(label), tag_str, now, now, origin,
+                 None if opened is None else int(bool(opened)), text_hash),
             )
 
     def labels_frame(self, origin: str | None = "human") -> pd.DataFrame:
@@ -270,9 +294,11 @@ class Database:
     def add_impressions(self, rows: Iterable[dict]) -> None:
         with self.conn:
             self.conn.executemany(
-                "INSERT INTO impressions (paper_id, shown_at, reason, score, rank, model_id) "
-                "VALUES (:paper_id, :shown_at, :reason, :score, :rank, :model_id)",
-                [{"score": None, "rank": None, "model_id": None, **r} for r in rows],
+                "INSERT INTO impressions (paper_id, shown_at, reason, score, rank, model_id, propensity, "
+                "n_candidates, position) VALUES (:paper_id, :shown_at, :reason, :score, :rank, :model_id, "
+                ":propensity, :n_candidates, :position)",
+                [{"score": None, "rank": None, "model_id": None, "propensity": None, "n_candidates": None,
+                  "position": None, **r} for r in rows],
             )
 
     def shown_ids(self) -> set[str]:

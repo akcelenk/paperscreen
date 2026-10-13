@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 (2026-10-13)
+
+Fixed
+- arXiv coverage: one newest-first query capped at 3000 papers dropped the oldest days of a busy week.
+  The fetch now queries one submission day at a time (`submittedDate`), and a day that still hits
+  `max_per_day` is reported in the fetch log and as a monitor alert.
+- Several "more" batches on one day reused the same random stream.
+
+Added
+- Active-learning arm: `digest.n_uncertain` papers closest to the decision boundary per batch.
+- Impressions log propensity, candidate-pool size and position (for off-policy evaluation later).
+- Labels log whether a link was opened and a hash of the judged text. Nothing about time spent is
+  recorded, on purpose: judging should never feel timed. Existing
+  databases are migrated in place.
+- `gte-base` and `gte-large` embedders.
+- A one-line labelling guideline in the review card.
+
 ## 0.3.0 (2026-10-13)
 
 Added

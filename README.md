@@ -83,6 +83,15 @@ first start to change interests, `contact_email` or the university proxy link.
 * **Blind digest.** Items carry no scores or markers and are shuffled inside each interest group.
   A few (default 5) are drawn uniformly at random from all candidates; the impression log records
   which. Those are what make later evaluation unbiased.
+* **Active learning.** Once the model is trained, each batch also holds a few papers it is least sure
+  about (`digest.n_uncertain`, logged as `uncertain`): a label near the decision boundary teaches the
+  model the most. They are kept out of the unbiased random slice and shown as their own arm in the monitor.
+* **What is logged, because it cannot be recovered later.** Every impression stores its arm, the
+  probability that arm picked it (1 for deterministic arms, k/N for the uniform picks), the size of
+  the candidate pool and its position in the batch, so new rankers can later be scored off-policy
+  (inverse propensity weighting) on old data. Every label stores whether a link was opened first and a hash of the exact text that was judged.
+  Nothing about time spent is recorded: judging should never feel timed.
+
 * **Paywalled journals.** Ranking uses titles and abstracts only, which OpenAlex and PubMed provide
   for subscription journals without any subscription. Set `digest.proxy_prefix` to your university's
   proxy (for example an EZproxy login URL) and each digest entry gets a "via university" link for when
@@ -101,7 +110,8 @@ first start to change interests, `contact_email` or the university proxy link.
 | `per_interest_logreg` | one logistic regression per interest, max-combined |
 | `fusion_tfidf_emb` | rank average of sparse and dense scores |
 
-Embedders: `hash-256` (offline, lexical), `bge-small`, `minilm`, `specter2-base`, `scincl`
+Embedders: `hash-256` (offline, lexical), `bge-small`, `minilm`, `specter2-base`, `scincl`,
+`gte-base`, `gte-large` (Scholar Inbox found GTE-large best on explicit ratings; slower on CPU)
 (`embedding.model`). Check each model card's licence before redistributing anything derived from it.
 
 ## Evaluation design
@@ -192,6 +202,8 @@ make demo        # synthetic end-to-end run: digest, report, monitor.md
 * The OpenAlex parser is tested against a hand-written fixture that follows the documented schema,
   not a recorded live response (the shared free quota was exhausted during development). Run
   `paperscreen fetch --source openalex` once with your key and look at the output.
+* arXiv is queried one submission day at a time, so a busy week is never cut off by a global cap; a day
+  that still hits `max_per_day` raises a monitor alert.
 * The arXiv API can lag by days around weekends; the fetch watermark follows the newest paper
   seen, with a 3-day overlap, so late-indexed papers are picked up.
 * One labeller. Power is low with a few hundred labels: expect wide intervals and say so.

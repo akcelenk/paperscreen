@@ -48,3 +48,11 @@ def test_monitor_and_models_cli(tmp_path, monkeypatch):
     assert r.exit_code == 0 and "no saved models" in r.output
     r = CliRunner().invoke(main, ["monitor", "--out", "m.md"])
     assert r.exit_code == 0 and (tmp_path / "m.md").read_text().startswith("# paperscreen monitoring")
+
+
+def test_monitor_alerts_on_truncated_fetch(demo_db):
+    db, last = demo_db
+    db.kv_set("truncated:arxiv", "2026-06-20")
+    assert any("per-day cap" in a for a in build_monitor(db, today=last).alerts)
+    db.kv_set("truncated:arxiv", "")
+    assert not any("per-day cap" in a for a in build_monitor(db, today=last).alerts)

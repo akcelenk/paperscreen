@@ -64,3 +64,43 @@ def test_proxy_link_and_no_overwrite(tmp_path, cfg):
     second = build_digest(db, c2, ctx, today=date(2026, 10, 13))
     assert first.path != second.path and len(list(tmp_path.glob("*.md"))) == 2
     db.close()
+
+
+def test_impressions_log_propensity_position_and_uncertain_arm(demo_db, cfg, tmp_path):
+    db, last = demo_db
+    c = cfg.with_overrides(digest={"out_dir": str(tmp_path), "n_uncertain": 3})
+    ctx = make_ctx(db, c)
+    dg = build_digest(db, c, ctx, today=last)
+    rows = db.conn.execute("SELECT reason, propensity, n_candidates, position FROM impressions "
+                           "WHERE model_id=? ORDER BY position", (dg.model_id,)).fetchall()
+    reasons = [r[0] for r in rows]
+    assert reasons.count("uncertain") == 3 and reasons.count("random") == c["digest"]["n_random"]
+    assert [r[3] for r in rows] == list(range(len(rows)))
+    n = rows[0][2]
+    assert n == dg.n_candidates and all(r[2] == n for r in rows)
+    for reason, prop, *_ in rows:
+        assert (0 < prop < 1) if reason == "random" else prop == 1.0
+    # the uncertain picks sit closest to the boundary among papers the model did not pick
+    unc = {e.paper.paper_id: e.score for e in dg.entries if e.reason == "uncertain"}
+    assert max(abs(s) for s in unc.values()) <= min(abs(e.score) for e in dg.entries if e.reason == "random")
+
+
+def test_more_batches_on_one_day_draw_fresh_random_picks(demo_db, cfg, tmp_path):
+    db, last = demo_db
+    c = cfg.with_overrides(digest={"out_dir": str(tmp_path)})
+    ctx = make_ctx(db, c)
+    a = build_digest(db, c, ctx, today=last)
+    b = build_digest(db, c, ctx, today=last)
+    pa = {e.paper.paper_id for e in a.entries}
+    assert pa.isdisjoint(e.paper.paper_id for e in b.entries)
+
+
+def test_no_uncertain_arm_during_cold_start(cfg, tmp_path):
+    db = Database(":memory:")
+    ctx = make_ctx(db, cfg)
+    for i in range(30):
+        db.upsert_paper(Paper(title=f"Cold start paper {i} about something", abstract="alpha beta gamma",
+                              published="2026-10-13", source="arxiv", arxiv_id=f"2610.0400{i:02d}"))
+    dg = build_digest(db, cfg.with_overrides(digest={"out_dir": str(tmp_path)}), ctx, today=date(2026, 10, 13))
+    assert dg.model_id.startswith("zeroshot") and {e.reason for e in dg.entries} <= {"coldstart", "random"}
+    db.close()

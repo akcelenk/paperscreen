@@ -48,7 +48,8 @@ def _first_impressions(db: Database) -> pd.DataFrame:
     )
     df["day"] = pd.to_datetime(df["shown_at"], utc=True, errors="coerce").dt.date
     df["week"] = df["day"].map(lambda d: (d - timedelta(days=d.weekday())).isoformat() if pd.notna(d) else "")
-    df["arm"] = df["reason"].map(lambda r: "random" if r == "random" else "model")
+    # "uncertain" picks are chosen for being hard, so they get their own arm instead of diluting "model".
+    df["arm"] = df["reason"].map(lambda r: r if r in ("random", "uncertain") else "model")
     return df
 
 
@@ -131,6 +132,10 @@ def build_monitor(db: Database, registry_dir: str | None = None, today: date | N
                      "fit_seconds": c.fit_seconds, "versions_kept": len(cards)}
 
     alerts = []
+    for src in ("arxiv", "pubmed", "openalex"):
+        days = db.kv_get(f"truncated:{src}")
+        if days:
+            alerts.append(f"{src}: the last fetch hit its per-day cap on {days}; raise max_per_day or narrow the categories")
     for _, r in quality.iterrows():
         if r["days_since_newest"] is not None and r["days_since_newest"] > stale_days:
             alerts.append(f"{r['source']}: newest paper is {r['days_since_newest']} days old (source may be down or lagging)")
@@ -165,7 +170,8 @@ def render_monitor(m: MonitorReport) -> str:
         f"lift x{p['lift']:.2f}" if p["lift"] == p["lift"] else
         f"- Difference: {_pct(p['diff'])} (95% CI {_pct(p['diff_lo'])} to {_pct(p['diff_hi'])})",
         "",
-        "Model picks include cold-start (zero-shot) weeks. Per week:",
+        "Model picks include cold-start (zero-shot) weeks; papers picked for being uncertain (active learning) "
+        "are listed as their own arm and left out of the comparison. Per week:",
         "",
         md_table(m.weekly) if not m.weekly.empty else "_(no judgements yet)_",
         "",

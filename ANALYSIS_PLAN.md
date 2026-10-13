@@ -64,3 +64,10 @@ fusion, prototype `k`. Report with uncorrected intervals and the label "explorat
 * 2026-10-13 (before any real labels): the random-negative pool rule was corrected. It used to exclude
   every paper ever labelled, which leaks future information into past windows; it now excludes only
   training labels and test-window items. No hypothesis or setting changed.
+* 2026-10-13 (before any real labels): data collection extended. (1) An `uncertain` arm (active
+  learning, 3 papers per batch once the model is trained) is added; its items are excluded from the
+  random slice, so the bias check is unchanged. (2) Impressions now log propensity, pool size and
+  position; labels log link opening and a text hash (no timing). (3) arXiv is fetched per day, so the
+  candidate pool is complete. Model hyperparameters stay as fixed above: Scholar Inbox's published
+  values were considered and not adopted, because their S and V are parametrised differently.
+  Hypotheses unchanged.

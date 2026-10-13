@@ -126,6 +126,9 @@ def get_embedder(name: str) -> Embedder:
         return SentenceTransformerEmbedder(name, "BAAI/bge-small-en-v1.5")
     if name == "minilm":
         return SentenceTransformerEmbedder(name, "sentence-transformers/all-MiniLM-L6-v2")
+    if name in ("gte-base", "gte-large"):
+        # Scholar Inbox found GTE-large best on explicit ratings (title [SEP] abstract input).
+        return SentenceTransformerEmbedder(name, f"thenlper/{name}", fmt="title_sep_abstract", batch_size=16)
     if name == "specter2-base":
         return CLSEmbedder(name, "allenai/specter2_base")
     if name == "scincl":

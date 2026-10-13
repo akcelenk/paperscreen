@@ -114,6 +114,7 @@ const $ = id => document.getElementById(id);
 const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : null;
 
 let state = null, items = [], idx = 0, selected = new Set(), history = [], busy = false;
+let opened = false;  // whether a link was opened before judging (no timing is recorded)
 
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
@@ -146,6 +147,7 @@ async function loadItems() {
 
 function startItem() {
   selected = new Set(items[idx] ? [items[idx].suggest] : []);
+  opened = false;
 }
 
 function render() {
@@ -171,8 +173,9 @@ function render() {
       el('kbd', {text: String(i + 1)}), it.name));
   });
   const links = el('div', {class: 'links'});
-  if (safeUrl(p.url)) links.append(el('a', {href: p.url, target: '_blank', rel: 'noopener', text: 'Open'}));
-  if (safeUrl(p.access_url)) links.append(el('a', {href: p.access_url, target: '_blank', rel: 'noopener', text: 'Via university'}));
+  const mark = () => { opened = true; };
+  if (safeUrl(p.url)) links.append(el('a', {href: p.url, target: '_blank', rel: 'noopener', text: 'Open', onclick: mark}));
+  if (safeUrl(p.access_url)) links.append(el('a', {href: p.access_url, target: '_blank', rel: 'noopener', text: 'Via university', onclick: mark}));
   box.append(el('div', {class: 'card'},
     el('div', {class: 'meta', text: meta}),
     el('h2', {text: p.title}),
@@ -186,7 +189,8 @@ function render() {
       el('button', {class: 'no', text: 'Not for me (n)', onclick: () => judge(0)}),
       el('button', {text: 'Skip (s)', onclick: skip}),
       el('button', {text: 'Undo (z)', onclick: undo})),
-    el('div', {class: 'hint', text: 'Keys: y / n / s / z, 1-5 to toggle tags, m for the next batch. Judge each paper on its own.'})));
+    el('div', {class: 'hint', text: 'Yes = you would want to know this paper exists (the topic fits), whatever its quality. '
+      + 'Unsure? Skip. Keys: y / n / s / z, 1-5 tags, m next batch.'})));
 }
 
 function toggle(id) { selected.has(id) ? selected.delete(id) : selected.add(id); render(); }
@@ -195,7 +199,7 @@ async function judge(label) {
   if (busy || idx >= items.length) return; busy = true;
   try {
     const p = items[idx];
-    await api('/api/label', {id: p.id, label, tags: label ? [...selected] : []});
+    await api('/api/label', {id: p.id, label, tags: label ? [...selected] : [], opened});
     history.push(idx); idx++; startItem(); render(); loadStateQuiet();
   } catch (e) { alert(e.message); } finally { busy = false; }
 }

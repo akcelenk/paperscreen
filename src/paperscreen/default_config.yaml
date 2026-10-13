@@ -60,8 +60,8 @@ sources:
   arxiv:
     enabled: true
     categories: [cs.LG, stat.ML, cs.CL, cs.AI, cs.NE, math.OC, cs.CV]
-    page_size: 100
-    max_papers: 3000        # safety cap per fetch run
+    page_size: 500
+    max_per_day: 3000       # safety cap per submission day (the fetch queries one day at a time)
   pubmed:
     enabled: true
     require_abstract: true
@@ -102,6 +102,7 @@ model:
 digest:
   per_interest: 4
   n_random: 5               # uniformly random, unmarked picks: the unbiased evaluation slice
+  n_uncertain: 3             # once the model is trained: papers it is least sure about (active learning)
   lookback_days: 7
   proxy_prefix: null        # e.g. "https://ezproxy.your-university.edu/login?url=" for paywalled links
   out_dir: digests

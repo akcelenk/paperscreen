@@ -77,3 +77,34 @@ def test_persistent_file(tmp_path):
     d.close()
     with Database(p) as d2:
         assert d2.count_papers() == 1
+
+
+def test_old_database_is_migrated(tmp_path):
+    import sqlite3
+
+    p = tmp_path / "old.sqlite"
+    c = sqlite3.connect(p)  # the 0.2.0 schema of the two changed tables
+    c.executescript(
+        "CREATE TABLE papers (paper_id TEXT PRIMARY KEY, title TEXT NOT NULL, abstract TEXT NOT NULL DEFAULT '',"
+        " published TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', arxiv_id TEXT, doi TEXT, pmid TEXT,"
+        " openalex_id TEXT, authors TEXT NOT NULL DEFAULT '', categories TEXT NOT NULL DEFAULT '',"
+        " venue TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', first_seen TEXT NOT NULL);"
+        "CREATE TABLE labels (paper_id TEXT PRIMARY KEY, label INTEGER NOT NULL, tags TEXT NOT NULL DEFAULT '',"
+        " labeled_at TEXT NOT NULL, updated_at TEXT NOT NULL, origin TEXT NOT NULL DEFAULT 'human');"
+        "CREATE TABLE impressions (id INTEGER PRIMARY KEY AUTOINCREMENT, paper_id TEXT NOT NULL, shown_at TEXT NOT NULL,"
+        " reason TEXT NOT NULL, score REAL, rank INTEGER, model_id TEXT);"
+        "INSERT INTO papers (paper_id, title, first_seen) VALUES ('arxiv:1', 'Old', '2026-10-01');"
+        "INSERT INTO labels VALUES ('arxiv:1', 1, '', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', 'human');"
+    )
+    c.commit()
+    c.close()
+    with Database(p) as d:
+        cols = {r[1] for r in d.conn.execute("PRAGMA table_info(labels)")}
+        assert {"opened", "text_hash"} <= cols and "dwell_ms" not in cols
+        assert {"propensity", "n_candidates", "position"} <= {r[1] for r in d.conn.execute("PRAGMA table_info(impressions)")}
+        assert len(d.labels_frame()) == 1  # old rows survive
+        d.set_label("arxiv:1", 0, opened=True, text_hash="h")
+        row = d.conn.execute("SELECT opened, text_hash FROM labels").fetchone()
+        assert tuple(row) == (1, "h")
+    with Database(p):  # opening again is a no-op
+        pass

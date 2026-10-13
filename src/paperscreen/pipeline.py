@@ -20,6 +20,8 @@ def refresh(cfg: Config, db: Database, ctx: Context, days: int | None = None,
         log(f"{s.source}: skipped ({s.skipped})")
     for r in fetch_all(db, sources, days=days, today=today):
         log(f"{r.source}: ERROR {r.error}" if r.error else f"{r.source}: {r.fetched} fetched, {r.new} new")
+        if r.warning:
+            log(f"{r.source}: WARNING {r.warning}")
     log("ranking and building the digest (the first run downloads the embedding model)...")
     dg = build_digest(db, cfg, ctx, today)
     log(f"digest ready: {len(dg.entries)} papers ({dg.model_id})" if dg.entries else "no new candidates")

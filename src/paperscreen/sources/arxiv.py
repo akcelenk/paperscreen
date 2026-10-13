@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Iterator
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from ..http import HttpClient
@@ -55,45 +55,59 @@ def parse_atom(xml_text: str) -> list[Paper]:
 
 
 class ArxivSource(Source):
+    """arXiv API, queried one submission day at a time.
+
+    A single "newest first" query with a global cap silently drops the oldest days once the
+    selected categories produce more papers than the cap (cs.LG and cs.AI alone had ~44k
+    submissions each in 2025). Slicing by ``submittedDate`` keeps every day complete; a day that
+    still hits ``max_per_day`` is recorded in ``truncated_days`` so the gap is visible.
+    """
+
     name = "arxiv"
 
     def __init__(
         self,
         categories: Iterable[str],
         http: HttpClient | None = None,
-        page_size: int = 100,
-        max_papers: int = 3000,
+        page_size: int = 500,
+        max_per_day: int = 3000,
         contact: str | None = None,
     ):
         self.categories = list(categories)
-        ua = "paperscreen/0.1" + (f" (mailto:{contact})" if contact else "")
+        ua = "paperscreen/0.3" + (f" (mailto:{contact})" if contact else "")
         self.http = http or HttpClient(min_interval=3.1, user_agent=ua)
         self.page_size = page_size
-        self.max_papers = max_papers
+        self.max_per_day = max_per_day
+        self.truncated_days: list[str] = []
+
+    def day_query(self, day: date) -> str:
+        cats = " OR ".join(f"cat:{c}" for c in self.categories)
+        d = day.strftime("%Y%m%d")
+        return f"({cats}) AND submittedDate:[{d}0000 TO {d}2359]"  # GMT, per the API manual
 
     def fetch(self, since: date, until: date | None = None) -> Iterator[Paper]:
-        query = " OR ".join(f"cat:{c}" for c in self.categories)
-        since_s = since.isoformat()
-        until_s = until.isoformat() if until else None
-        start = 0
-        while start < self.max_papers:
-            r = self.http.get(
-                API_URL,
-                params={
-                    "search_query": query, "start": start, "max_results": self.page_size,
-                    "sortBy": "submittedDate", "sortOrder": "descending",
-                },
-            )
-            page = parse_atom(r.text)
-            if not page:
-                return
-            for p in page:
-                if p.published < since_s:
-                    return  # results are sorted newest first
-                if until_s and p.published > until_s:
-                    continue
-                yield p
-            start += self.page_size
+        until = until or date.today()
+        self.truncated_days = []
+        day = until
+        while day >= since:
+            start = 0
+            while True:
+                r = self.http.get(
+                    API_URL,
+                    params={
+                        "search_query": self.day_query(day), "start": start, "max_results": self.page_size,
+                        "sortBy": "submittedDate", "sortOrder": "descending",
+                    },
+                )
+                page = parse_atom(r.text)
+                yield from page
+                start += len(page)
+                if len(page) < self.page_size:
+                    break
+                if start >= self.max_per_day:
+                    self.truncated_days.append(day.isoformat())
+                    break
+            day -= timedelta(days=1)
 
 
 def import_kaggle_jsonl(

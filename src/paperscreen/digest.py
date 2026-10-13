@@ -102,6 +102,7 @@ def build_digest(db: Database, cfg: Config, ctx: Context, today: date | None = N
     today = today or datetime.now(timezone.utc).date()
     dc = cfg["digest"]
     cands = candidates(db, cfg, today)
+    shown_before = db.shown_ids()
     if not cands:
         return Digest(today.isoformat(), "none", [], 0, markdown=f"# Digest {today}\n\nNo new candidates.\n")
 
@@ -117,13 +118,27 @@ def build_digest(db: Database, cfg: Config, ctx: Context, today: date | None = N
     reason = "coldstart" if ranker_type == "zeroshot" else "exploit"
 
     picked: dict[int, str] = {}
+    propensity: dict[int, float] = {}
     for g in range(len(ctx.interests)):
         idx = [i for i in np.argsort(-scores, kind="stable") if assign[i] == g][: dc["per_interest"]]
         picked.update({int(i): reason for i in idx})
-    rng = np.random.default_rng(int(today.strftime("%Y%m%d")) + cfg.seed)
+    # Active learning: a few papers closest to the decision boundary, where a label teaches the
+    # model the most (Scholar Inbox samples near its boundary for the same reason). Logged under
+    # their own reason, so they never enter the unbiased random slice.
+    boundary = getattr(ranker, "boundary", None)
+    n_unc = int(dc.get("n_uncertain", 0))
+    if reason == "exploit" and boundary is not None and n_unc > 0:
+        rest = [i for i in range(len(cands)) if i not in picked]
+        for i in sorted(rest, key=lambda i: (abs(float(scores[i]) - boundary), i))[:n_unc]:
+            picked[int(i)] = "uncertain"
+    propensity.update({i: 1.0 for i in picked})  # the arms above are deterministic
+    # A fresh stream per batch: several batches on one day ("more papers") must not reuse draws.
+    rng = np.random.default_rng([int(today.strftime("%Y%m%d")), cfg.seed, len(shown_before)])
     rest = [i for i in range(len(cands)) if i not in picked]
-    for i in rng.choice(rest, size=min(dc["n_random"], len(rest)), replace=False) if rest else []:
+    k = min(dc["n_random"], len(rest))
+    for i in rng.choice(rest, size=k, replace=False) if rest else []:
         picked[int(i)] = "random"
+        propensity[int(i)] = k / len(rest)  # uniform over the papers no other arm took
 
     # Nearest positives, for a short "why this one" line.
     pos = [p for p, y in zip(data.papers, data.y, strict=True) if y == 1][-2000:]
@@ -146,8 +161,11 @@ def build_digest(db: Database, cfg: Config, ctx: Context, today: date | None = N
                                     key=lambda t: t[0])]
 
     now = f"{today.isoformat()}T{datetime.now(timezone.utc):%H:%M:%S}Z"
+    pid_to_i = {cands[i].paper_id: i for i in picked}
     db.add_impressions([{"paper_id": e.paper.paper_id, "shown_at": now, "reason": e.reason,
-                         "score": e.score, "rank": e.rank, "model_id": model_id} for e in entries])
+                         "score": e.score, "rank": e.rank, "model_id": model_id,
+                         "propensity": propensity[pid_to_i[e.paper.paper_id]], "n_candidates": len(cands),
+                         "position": pos} for pos, e in enumerate(entries)])
     md = render_digest(today.isoformat(), model_id, entries, len(cands), ctx, dc.get("proxy_prefix"))
     dg = Digest(today.isoformat(), model_id, entries, len(cands), markdown=md)
     if write:

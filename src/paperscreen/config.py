@@ -32,7 +32,7 @@ class ConfigError(ValueError):
     """A config value is missing, misspelt or out of range (all problems are listed at once)."""
 
 
-KNOWN_EMBEDDERS = ("bge-small", "minilm", "specter2-base", "scincl")
+KNOWN_EMBEDDERS = ("bge-small", "minilm", "specter2-base", "scincl", "gte-base", "gte-large")
 LEARNED_RANKERS = ("emb_logreg", "per_interest_logreg", "tfidf_svm", "prototype")
 
 
@@ -68,7 +68,7 @@ def validate(raw: dict) -> None:
     for key, lo, hi in (("C", 1e-9, None), ("S", 1e-9, None), ("V", 0, 1), ("n_random", 0, None)):
         if key in (model.get("params") or {}):
             num(f"model.params.{key}", lo, hi, integer=key == "n_random")
-    for path in ("model.min_labels", "model.min_positives", "model.min_negatives", "digest.n_random",
+    for path in ("model.min_labels", "model.min_positives", "model.min_negatives", "digest.n_random", "digest.n_uncertain",
                  "digest.lookback_days", "evaluation.min_train_labels", "evaluation.n_boot"):
         num(path, 0, None, integer=True)
     num("digest.per_interest", 1, None, integer=True)

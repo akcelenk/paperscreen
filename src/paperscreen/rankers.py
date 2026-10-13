@@ -83,13 +83,20 @@ class Context:
         return out
 
 
+# Pre-registered in ANALYSIS_PLAN.md. Do not copy Scholar Inbox's published values (C=0.1, V=0.8, S=5)
+# into these knobs: there V up-weights *explicit* negatives per example (w_N ~ V, w_R ~ 1-V) and S scales
+# per-example weights, whereas here V is the share of negative mass on *random* papers and S the total
+# negative mass relative to the positives. The exploratory V/S grid in the report tunes them on your data.
+DEFAULT_LOGREG = {"C": 1.0, "S": 1.0, "V": 0.5, "n_random": 1000}
+
+
 def negative_weights(n_pos: int, n_exp: int, n_rand: int, S: float, V: float) -> tuple[float, float]:
     """Per-example weights ``(w_explicit_negative, w_random_negative)``; positives weigh 1.
 
     The total negative weight is ``S * n_pos``. A share ``V`` of it goes to random unlabeled papers
     (treated as weak negatives), the rest to your explicit "not interested" labels. This
     parametrisation is ours; it is inspired by, not identical to, the weighting scheme in the
-    Scholar Inbox paper (arXiv:2504.08385).
+    Scholar Inbox paper (arXiv:2504.08385), where V weights explicit negatives instead.
     """
     mass = S * max(n_pos, 1)
     if n_exp > 0 and n_rand > 0:
@@ -131,6 +138,8 @@ def _fit_weighted_logreg(X_pos, X_exp, X_rand, C: float, S: float, V: float):
 
 class Ranker(ABC):
     needs_fit = True
+    # Score at which the model is undecided (used to pick "uncertain" papers); None if it has none.
+    boundary: float | None = None
 
     def __init__(self, ctx: Context, embedder: str | None = None, fmt: str | None = None, **params):
         self.ctx = ctx
@@ -228,6 +237,8 @@ class ZeroShotRanker(Ranker):
 class TfidfSvmRanker(Ranker):
     """Positives vs the rest, TF-IDF + linear SVM, class-balanced (arxiv-sanity-lite's recipe)."""
 
+    boundary = 0.0
+
     def fit(self, data):
         p = {"C": 0.1, "n_random": 1000, "min_df": 2, **self.params}
         rnd = _sample_pool(data, p["n_random"], self.ctx.seed)
@@ -262,8 +273,10 @@ class TfidfSvmRanker(Ranker):
 class EmbeddingLogRegRanker(Ranker):
     """Frozen embedding + class-weighted L2 logistic regression with random weak negatives."""
 
+    boundary = 0.0
+
     def fit(self, data):
-        p = {"C": 1.0, "S": 1.0, "V": 0.5, "n_random": 1000, **self.params}
+        p = {**DEFAULT_LOGREG, **self.params}
         rnd = _sample_pool(data, p["n_random"], self.ctx.seed)
         X = self._X(data.papers) if data.papers else np.zeros((0, 1))
         X_r = self._X(rnd) if rnd else np.zeros((0, X.shape[1] if X.size else 1))
@@ -314,9 +327,10 @@ class PerInterestLogRegRanker(Ranker):
     for it, not negatives. A global model over all positives is included as a fallback member.
     """
 
+    boundary = 0.5
+
     def fit(self, data):
-        p = {"C": 1.0, "S": 1.0, "V": 0.5, "n_random": 1000, "min_pos": 5, "include_global": True,
-             **self.params}
+        p = {**DEFAULT_LOGREG, "min_pos": 5, "include_global": True, **self.params}
         rnd = _sample_pool(data, p["n_random"], self.ctx.seed)
         X = self._X(data.papers) if data.papers else np.zeros((0, 1))
         X_r = self._X(rnd) if rnd else np.zeros((0, X.shape[1] if X.size else 1))

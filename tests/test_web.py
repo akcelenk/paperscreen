@@ -65,11 +65,14 @@ def test_label_undo_and_state(server):
     _, items = call(port, "GET", "/api/items")
     pid = items[0]["id"]
     tag = cfg.interests[0].id
-    assert call(port, "POST", "/api/label", {"id": pid, "label": 1, "tags": [tag, "bogus"]}, POST)[0] == 200
+    assert call(port, "POST", "/api/label", {"id": pid, "label": 1, "tags": [tag, "bogus"], "opened": True}, POST)[0] == 200
     st, state = call(port, "GET", "/api/state")
     assert state["labels"] == 1 and state["positives"] == 1 and state["unlabeled"] == 2
     lab = labels_of(cfg.db_path).iloc[0]
     assert lab["tags"] == (tag,)  # unknown tags are dropped
+    with Database(cfg.db_path) as db:
+        row = db.conn.execute("SELECT opened, text_hash FROM labels WHERE paper_id=?", (pid,)).fetchone()
+    assert row[0] == 1 and len(row[1]) > 8
     call(port, "POST", "/api/unlabel", {"id": pid}, POST)
     assert call(port, "GET", "/api/state")[1]["unlabeled"] == 3
     assert call(port, "POST", "/api/label", {"id": pid, "label": 7}, POST)[0] == 400
